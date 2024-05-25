@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
 # Function to log messages
 log() {
@@ -10,11 +10,28 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Ensure essential commands are available
-for cmd in psql awk sed cp systemctl; do
-    if ! command_exists $cmd; then
-        log "Error: Required command $cmd is not available."
+# Function to prompt the user for installation
+prompt_install() {
+    read -p "The $1 package is not installed. Do you want to install it? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+        log "Installing $1"
+        apt update && apt install -y "$1"
+    else
+        log "Cannot proceed without installing $1. Exiting."
         exit 1
+    fi
+}
+
+# Check and install essential packages
+essential_packages=(psql awk sed cp systemctl)
+for cmd in "${essential_packages[@]}"; do
+    if ! command_exists "$cmd"; then
+        case "$cmd" in
+            psql) package="postgresql" ;;
+            *) package="$cmd" ;;
+        esac
+        prompt_install "$package"
     fi
 done
 
@@ -82,13 +99,21 @@ EOF
     fi
 }
 
+# Function to install Python packages
+install_python_packages() {
+    required_packages=(pgmpy pyperplan pg8000 pymetasploit)
+    for package in "${required_packages[@]}"; do
+        pip3 show "$package" >/dev/null 2>&1 || pip3 install "$package"
+    done
+}
+
 # Update package list and install necessary packages
 log "Updating package list and installing necessary packages"
 apt update && apt install -y python3-gvm python3-numpy python3-pandas python3-psycopg2 python3-pymetasploit3 python3-rich python3-ruamel.yaml python3-torch gvm greenbone-security-assistant postgresql
 
 # Install Python packages
 log "Installing Python packages"
-pip3 install pgmpy pyperplan pg8000
+install_python_packages
 
 # Check the default PostgreSQL version
 DEFAULT_PG_VERSION=$(psql -V | awk '{print $3}')
